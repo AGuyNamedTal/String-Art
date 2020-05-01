@@ -434,14 +434,7 @@ namespace StringArt
 
             } while ((lineAdditionDelta > 0 || lineRemovalDelta > 0) && !_stopArt);
 
-            if (_stopArt)
-            {
-                Console.WriteLine("Arting stopped because user");
-            }
-            else
-            {
-                Console.WriteLine("Arting stopped because delta");
-            }
+            Console.WriteLine(_stopArt ? "Arting stopped because user" : "Arting stopped because delta");
 
             UpdateStringImageBitmap();
             _isArting = false;
