@@ -2,8 +2,8 @@
 using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Threading.Tasks;
@@ -13,22 +13,19 @@ namespace StringArt
 {
     public partial class MainForm : Form
     {
-        private Bitmap _originalImage;
+        private Bitmap _inputImage;
         private readonly Bitmap _stringBitmap;
-
-
         private readonly int _panelSize;
 
         private PointF[] _edgePoints;
         private readonly List<Tuple<PointF, PointF>> _lines = new List<Tuple<PointF, PointF>>();
 
-
         private byte[] _imageGrayBytes;
         private int[] _stringImageGrayBytes;
-        private int[] startingXForByteArray;
+        private readonly int[] _startingXForByteArray;
 
-        private bool _stopArt = false;
-        private bool _isArting = false;
+        private bool _stopWork = false;
+        private bool _isWorking = false;
 
 
 
@@ -37,8 +34,6 @@ namespace StringArt
             InitializeComponent();
 
             _panelSize = picturePanel.Width;
-            //ChooseImage(null, null);
-
 
             #region Initialize __stringBitmap
             _stringBitmap = new Bitmap(_panelSize, _panelSize, PixelFormat.Format32bppRgb);
@@ -56,9 +51,9 @@ namespace StringArt
             }
             #endregion
             #region Initialize startingXForByteArray (Commented)
-            startingXForByteArray = new int[_panelSize];
+            _startingXForByteArray = new int[_panelSize];
             double radius = _panelSize / 2d;
-            for (int i = 0; i < startingXForByteArray.Length / 2; i++)
+            for (int i = 0; i < _startingXForByteArray.Length / 2; i++)
             {
                 //double asin = Math.Asin(i / radius);
                 //startingXForByteArray[i] = (int)(Math.Cos(asin) * radius);
@@ -73,141 +68,40 @@ namespace StringArt
                 // int y = (startingXForByteArray.Length / 2 - i - 1);
 
                 //startingXForByteArray[i] = (int)Math.Sqrt(radius * radius - y * y);
-                startingXForByteArray[i] = 0;
+                _startingXForByteArray[i] = 0;
             }
 
-            for (int i = startingXForByteArray.Length / 2; i < startingXForByteArray.Length; i++)
-            {
-                startingXForByteArray[i] = startingXForByteArray[startingXForByteArray.Length / 2 - (i - startingXForByteArray.Length / 2) - 1];
-            }
+            //for (int i = _startingXForByteArray.Length / 2; i < _startingXForByteArray.Length; i++)
+            //{
+            //    _startingXForByteArray[i] = _startingXForByteArray[_startingXForByteArray.Length / 2 - (i - _startingXForByteArray.Length / 2) - 1];
+            //}
             #endregion
 
 
             NumberOfEdgePointsNumericValueChanged(null, null);
-
-        }
-        /// <summary>
-        /// Resize the image to the specified width and height.
-        /// </summary>
-        /// <param name="image">The image to resize.</param>
-        /// <param name="width">The width to resize to.</param>
-        /// <param name="height">The height to resize to.</param>
-        /// <returns>The resized image.</returns>
-        private static Bitmap ResizeImage(Image image, int width, int height, bool dispose)
-        {
-            Rectangle destRect = new Rectangle(0, 0, width, height);
-            Bitmap destImage = new Bitmap(width, height);
-
-            destImage.SetResolution(image.HorizontalResolution, image.VerticalResolution);
-
-            using (Graphics graphics = Graphics.FromImage(destImage))
-            {
-                graphics.CompositingMode = CompositingMode.SourceCopy;
-                graphics.CompositingQuality = CompositingQuality.HighQuality;
-                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                graphics.SmoothingMode = SmoothingMode.HighQuality;
-                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-                using (ImageAttributes wrapMode = new ImageAttributes())
-                {
-                    wrapMode.SetWrapMode(WrapMode.TileFlipXY);
-                    graphics.DrawImage(image, destRect, 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, wrapMode);
-                }
-            }
-
-            if (dispose)
-            {
-                image.Dispose();
-            }
-            return destImage;
+            randomizerRadioBtn.Checked = true;
+            autoUpdateCheckBox.Checked = true;
         }
 
-        // makes nice round ellipse/circle images from rectangle images
-        private Bitmap ClipToCircle(Image srcImage, PointF center, float radius, bool dispose)
-        {
-            Bitmap dstImage = new Bitmap(srcImage.Width, srcImage.Height, srcImage.PixelFormat);
 
-            using (Graphics g = Graphics.FromImage(dstImage))
-            {
-                RectangleF r = new RectangleF(center.X - radius, center.Y - radius,
-                    radius * 2, radius * 2);
-
-                // enables smoothing of the edge of the circle (less pixelated)
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-
-                //// fills background color
-                //using (Brush br = new SolidBrush(backGround))
-                //{
-                //    g.FillRectangle(br, 0, 0, dstImage.Width, dstImage.Height);
-                //}
-
-                // adds the new ellipse & draws the image again 
-                GraphicsPath path = new GraphicsPath();
-                path.AddEllipse(r);
-                g.SetClip(path);
-                g.DrawImage(srcImage, 0, 0);
-
-                if (dispose)
-                {
-                    srcImage.Dispose();
-                }
-                return dstImage;
-            }
-        }
 
         private void PrepareOriginalImage(Image image)
         {
-            Bitmap transformedImage = ClipToCircle(ResizeImage(image, _panelSize, _panelSize, true),
-                new PointF(_panelSize / 2, _panelSize / 2), _panelSize, true);
-
-            BitmapData transformedImageBitmapData = transformedImage.LockBits(
-                new Rectangle(0, 0, _panelSize, _panelSize), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
-
-
-            Bitmap grayScaleImage = new Bitmap(_panelSize, _panelSize, PixelFormat.Format32bppRgb);
-
-            BitmapData grayScaleImageBitmapData = grayScaleImage.LockBits(new Rectangle(0, 0, _panelSize, _panelSize),
-                ImageLockMode.ReadWrite, PixelFormat.Format32bppRgb);
-            _imageGrayBytes = new byte[_panelSize * _panelSize * 1 /*1 byte for grayness*/];
-            for (int y = 0; y < _panelSize; y++)
-            {
-                int transformedImageYOffset = transformedImageBitmapData.Stride * y;
-                int grayScaleImageYOffset = grayScaleImageBitmapData.Stride * y;
-                for (int x = 0; x < _panelSize; x++)
-                {
-                    unsafe
-                    {
-                        int transformedImageIndex = x * (32 / 8) + transformedImageYOffset;
-                        int grayScaleImageIndex = x * (32 / 8) + grayScaleImageYOffset;
-                        byte* transformedImagePtr = (byte*)transformedImageBitmapData.Scan0 + transformedImageIndex;
-                        byte* grayScaleImagePtr = (byte*)grayScaleImageBitmapData.Scan0 + grayScaleImageIndex;
-                        byte b = transformedImagePtr[0];
-                        byte g = transformedImagePtr[1];
-                        byte r = transformedImagePtr[2];
-
-                        byte gray = (byte)(((b + g + r) / (Byte.MaxValue * 3f) * byte.MaxValue));
-
-                        grayScaleImagePtr[0] = gray;
-                        grayScaleImagePtr[1] = gray;
-                        grayScaleImagePtr[2] = gray;
-                        _imageGrayBytes[y * _panelSize + x] = gray;
-                    }
-                }
-            }
-            transformedImage.UnlockBits(transformedImageBitmapData);
-            transformedImage.Dispose();
-            grayScaleImage.UnlockBits(grayScaleImageBitmapData);
-
-            _originalImage = grayScaleImage;
+            _inputImage = image.Resize(_panelSize, _panelSize).ClipToCircle(new PointF(_panelSize / 2f, _panelSize / 2f), _panelSize / 2f)
+                .ToGrayScale(out _imageGrayBytes); ;
             picturePanel.Refresh();
 
         }
 
         private void PicturePanelPaint(object sender, PaintEventArgs e)
         {
-            if (_originalImage != null)
+            if (_inputImage == null)
             {
-                e.Graphics.DrawImage(_originalImage, 0, 0);
+                e.Graphics.DrawRectangle(Pens.Black, 0, 0, _panelSize - 1, _panelSize - 1);
+            }
+            else
+            {
+                e.Graphics.DrawImage(_inputImage, 0, 0);
             }
         }
 
@@ -232,7 +126,6 @@ namespace StringArt
 
         private void CanvasPaint(object sender, PaintEventArgs e)
         {
-
             if (_stringBitmap != null)
             {
                 lock (_stringBitmap)
@@ -250,14 +143,30 @@ namespace StringArt
 
         private void ArtBtnClick(object sender, EventArgs e)
         {
-            if (_isArting)
+            if (_isWorking)
             {
                 MessageBox.Show("Already drawing!", "", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            _isArting = true;
-            _stopArt = false;
+            //TODO: set enabled to false to algorithm selection when starting, and to true when finished/stooped
 
+            if (_lines.Count > 0)
+            {
+                DialogResult diagRes = MessageBox.Show("Do you want to clear the existing string art?", "",
+                    MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+                if (diagRes == DialogResult.Yes)
+                {
+                    ClearArt();
+                }
+                else if (diagRes == DialogResult.Cancel)
+                {
+                    return;
+                }
+            }
+            _isWorking = true;
+            _stopWork = false;
+            Action art = null;
+            string msg = "";
             if (firstComeFirstTakesRadioBtn.Checked)
             {
                 int seed;
@@ -270,7 +179,8 @@ namespace StringArt
                     seed = Environment.TickCount;
                 }
 
-                Task.Run(() => FirstComeFirstTakesStringArt(seed));
+                art = () => Task.Run(() => FirstComeFirstTakesStringArt(seed));
+                msg = "";
 
             }
             else if (randomizerRadioBtn.Checked)
@@ -303,11 +213,30 @@ namespace StringArt
                 int linesTakenIntoConsideration = (int)randomizerLinesNum.Value;
                 Task.Run(() => ConstantUpdateStringArt(seed, linesTakenIntoConsideration));
             }
-            else
+            else if (bestFirstRadioBtn.Checked)
             {
                 Task.Run(InefficientStringArt);
             }
+            else
+            {
+                MessageBox.Show("No algorithm selected");
+            }
+            if (art != null)
+            {
+                StartArtAlgorithm(art, msg);
+            }
         }
+
+        private void StartArtAlgorithm(Action art, string startMsg)
+        {
+            Console.WriteLine("Starting drawing");
+            Console.WriteLine(startMsg);
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            art();
+            stopwatch.Stop();
+            Console.WriteLine("Time elapsed: " + stopwatch.Elapsed);
+        }
+
 
         private void ConstantUpdateStringArt(int seed, int linesTakenIntoConsideration)
         {
@@ -325,7 +254,30 @@ namespace StringArt
 
                 Tuple<PointF, PointF> edgesAdded = null;
 
-                for (int i = 0; i < linesTakenIntoConsideration; i++)
+                //for (int i = 0; i < linesTakenIntoConsideration; i++)
+                //{
+                //    int edgePoint1Index = random.Next(_edgePoints.Length);
+                //    int edgePoint2Index = random.Next(_edgePoints.Length - 1);
+                //    if (edgePoint2Index == edgePoint1Index)
+                //    {
+                //        edgePoint2Index = _edgePoints.Length - 1;
+                //    }
+
+                //    PointF edgePoint1 = _edgePoints[edgePoint1Index];
+                //    PointF edgePoint2 = _edgePoints[edgePoint2Index];
+
+                //    long currentDelta = CalculateLineApplianceDifference(_stringImageGrayBytes, edgePoint1,
+                //        edgePoint2, lineChange, _imageGrayBytes);
+
+                //    if (currentDelta > lineAdditionDelta)
+                //    {
+                //        edgesAdded = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                //        lineAdditionDelta = currentDelta;
+                //    }
+                //}
+
+                object lockObj = new object();
+                Parallel.For(0, linesTakenIntoConsideration, (i) =>
                 {
                     int edgePoint1Index = random.Next(_edgePoints.Length);
                     int edgePoint2Index = random.Next(_edgePoints.Length - 1);
@@ -339,31 +291,21 @@ namespace StringArt
 
                     long currentDelta = CalculateLineApplianceDifference(_stringImageGrayBytes, edgePoint1,
                         edgePoint2, lineChange, _imageGrayBytes);
-
-                    if (currentDelta > lineAdditionDelta)
+                    lock (lockObj)
                     {
-                        edgesAdded = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
-                        lineAdditionDelta = currentDelta;
+                        if (currentDelta > lineAdditionDelta)
+                        {
+                            edgesAdded = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                            lineAdditionDelta = currentDelta;
+                        }
                     }
-                }
-
+                });
 
                 Console.WriteLine("ADD - ({0}, {1}) to ({2}, {3}) d = {4}", edgesAdded.Item1.X, edgesAdded.Item1.Y, edgesAdded.Item2.X,
                     edgesAdded.Item2.Y, lineAdditionDelta);
                 if (lineAdditionDelta > 0)
                 {
                     _lines.Add(edgesAdded);
-                    //Connector connector = new Connector(edgesAdded.Item1, edgesAdded.Item2);
-
-                    //if (_linesLayered.ContainsKey(connector))
-                    //{
-                    //    _linesLayered[connector]++;
-                    //}
-                    //else
-                    //{
-                    //    _linesLayered.Add(connector, 1);
-                    //}
-
                     lock (_stringImageGrayBytes)
                     {
                         _stringImageGrayBytes =
@@ -386,21 +328,37 @@ namespace StringArt
                 Tuple<PointF, PointF> edgesRemoved = null;
                 int edgeRemovalIndex = -1;
 
-                for (int i = 0; i < linesTakenIntoConsideration; i++)
+                //for (int i = 0; i < linesTakenIntoConsideration; i++)
+                //{
+                //    int lineIndex = random.Next(_lines.Count - 1); // no need to include the last index because we just added it
+                //    (PointF edgePoint1, PointF edgePoint2) = _lines[lineIndex];
+                //    long currentDelta = CalculateLineRemovalDifference(_stringImageGrayBytes, edgePoint1,
+                //        edgePoint2, lineChange, _imageGrayBytes);
+
+                //    if (currentDelta > lineRemovalDelta)
+                //    {
+                //        edgesRemoved = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                //        edgeRemovalIndex = lineIndex;
+                //        lineRemovalDelta = currentDelta;
+                //    }
+                //}
+                Parallel.For(0, linesTakenIntoConsideration, (i) =>
                 {
                     int lineIndex = random.Next(_lines.Count - 1); // no need to include the last index because we just added it
                     (PointF edgePoint1, PointF edgePoint2) = _lines[lineIndex];
                     long currentDelta = CalculateLineRemovalDifference(_stringImageGrayBytes, edgePoint1,
                         edgePoint2, lineChange, _imageGrayBytes);
 
-                    if (currentDelta > lineRemovalDelta)
+                    lock (lockObj)
                     {
-                        edgesRemoved = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
-                        edgeRemovalIndex = lineIndex;
-                        lineRemovalDelta = currentDelta;
+                        if (currentDelta > lineRemovalDelta)
+                        {
+                            edgesRemoved = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                            edgeRemovalIndex = lineIndex;
+                            lineRemovalDelta = currentDelta;
+                        }
                     }
-                }
-
+                });
 
                 if (lineRemovalDelta > 0)
                 {
@@ -432,12 +390,12 @@ namespace StringArt
 
 
 
-            } while ((lineAdditionDelta > 0 || lineRemovalDelta > 0) && !_stopArt);
+            } while ((lineAdditionDelta > 0 || lineRemovalDelta > 0) && !_stopWork);
 
-            Console.WriteLine(_stopArt ? "Arting stopped because user" : "Arting stopped because delta");
+            Console.WriteLine(_stopWork ? "Arting stopped because user" : "Arting stopped because delta");
 
             UpdateStringImageBitmap();
-            _isArting = false;
+            _isWorking = false;
         }
 
         private void InefficientStringArt()
@@ -497,31 +455,55 @@ namespace StringArt
                 {
                     Console.WriteLine("delta is less than or equal to zero so line not added and arting stopped");
                 }
-            } while (delta > 0 && !_stopArt);
+            } while (delta > 0 && !_stopWork);
 
-            if (_stopArt)
+            if (_stopWork)
             {
                 Console.WriteLine("Arting stopped because user");
             }
 
             UpdateStringImageBitmap();
-            _isArting = false;
+            _isWorking = false;
         }
 
         private void RandomizedStringArt(int seed, int linesTakenIntoConsideration)
         {
-            Random random = new Random(seed);
+            //Random random = new Random(seed);
+            ThreadSafeRandom random = new ThreadSafeRandom();
 
             double delta;
 
             int lineChange = (int)lineChangeNumeric.Value;
-
+            Stopwatch stopwatch = Stopwatch.StartNew();
             do
             {
                 delta = Double.NegativeInfinity;
                 Tuple<PointF, PointF> edges = null;
 
-                for (int i = 0; i < linesTakenIntoConsideration; i++)
+
+                //for (int i = 0; i < linesTakenIntoConsideration; i++)
+                //{
+                //    int edgePoint1Index = random.Next(_edgePoints.Length);
+                //    int edgePoint2Index = random.Next(_edgePoints.Length - 1);
+                //    if (edgePoint2Index == edgePoint1Index)
+                //    {
+                //        edgePoint2Index = _edgePoints.Length - 1;
+                //    }
+
+                //    PointF edgePoint1 = _edgePoints[edgePoint1Index];
+                //    PointF edgePoint2 = _edgePoints[edgePoint2Index];
+
+                //    long currentDelta = CalculateLineApplianceDifference(_stringImageGrayBytes, edgePoint1,
+                //        edgePoint2, lineChange, _imageGrayBytes);
+
+                //    if (currentDelta > delta)
+                //    {
+                //        edges = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                //        delta = currentDelta;
+                //    }
+                //}
+                object lockObj = new object();
+                Parallel.For(0, linesTakenIntoConsideration, (i) =>
                 {
                     int edgePoint1Index = random.Next(_edgePoints.Length);
                     int edgePoint2Index = random.Next(_edgePoints.Length - 1);
@@ -535,14 +517,15 @@ namespace StringArt
 
                     long currentDelta = CalculateLineApplianceDifference(_stringImageGrayBytes, edgePoint1,
                         edgePoint2, lineChange, _imageGrayBytes);
-
-                    if (currentDelta > delta)
+                    lock (lockObj)
                     {
-                        edges = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
-                        delta = currentDelta;
+                        if (currentDelta > delta)
+                        {
+                            edges = new Tuple<PointF, PointF>(edgePoint1, edgePoint2);
+                            delta = currentDelta;
+                        }
                     }
-                }
-
+                });
                 if (edges == null)
                 {
                     break;
@@ -564,17 +547,19 @@ namespace StringArt
                 {
                     Console.WriteLine("delta is less than or equal to zero so line not added and arting stopped");
                 }
-            } while (delta > 0 && !_stopArt);
-
-            if (_stopArt)
+            } while (delta > 0 && !_stopWork);
+            stopwatch.Stop();
+            if (_stopWork)
             {
                 Console.WriteLine("Arting stopped because user");
             }
 
+            Console.WriteLine("Time took: {0}", stopwatch.Elapsed.ToString());
             UpdateStringImageBitmap();
-            _isArting = false;
+            _isWorking = false;
 
         }
+
 
         private void FirstComeFirstTakesStringArt(int seed)
         {
@@ -644,15 +629,15 @@ namespace StringArt
                 {
                     Console.WriteLine("delta is less than or equal to zero so line not added and arting stopped");
                 }
-            } while (delta > 0 && !_stopArt);
+            } while (delta > 0 && !_stopWork);
 
-            if (_stopArt)
+            if (_stopWork)
             {
                 Console.WriteLine("Arting stopped because user");
             }
 
             UpdateStringImageBitmap();
-            _isArting = false;
+            _isWorking = false;
 
         }
         private void UpdateStringImageBitmap()
@@ -670,7 +655,7 @@ namespace StringArt
 
                 for (int y = 0; y < _panelSize; y++)
                 {
-                    int startingX = startingXForByteArray[y];
+                    int startingX = _startingXForByteArray[y];
                     int endingX = _panelSize - startingX;
                     for (int x = startingX; x < endingX; x++)
                     {
@@ -895,10 +880,11 @@ namespace StringArt
 
         private void StopArtBtn(object sender, EventArgs e)
         {
-            _stopArt = true;
+            _stopWork = true;
         }
 
-        private void ClearArtBtnClick(object sender, EventArgs e)
+        private void ClearArtBtnClick(object sender, EventArgs e) => ClearArt();
+        private void ClearArt()
         {
             lock (_stringBitmap)
             {
@@ -1166,6 +1152,11 @@ namespace StringArt
             {
                 customSeedCheckBox.Enabled = true;
             }
+        }
+
+        private void AutoUpdateCheckBoxCheckedChanged(object sender, EventArgs e)
+        {
+            msUpDown.Enabled = autoUpdateCheckBox.Checked;
         }
     }
 }

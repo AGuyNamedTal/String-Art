@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace StringArt
@@ -17,6 +14,13 @@ namespace StringArt
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
+        }
+
+        public static void Swap<T>(ref T obj1, ref T obj2)
+        {
+            T tmp = obj1;
+            obj1 = obj2;
+            obj2 = tmp;
         }
     }
 }
